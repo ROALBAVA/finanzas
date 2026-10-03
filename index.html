@@ -243,6 +243,7 @@ var P={
   home:'<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>',
   list:'<path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>',
   card:'<rect x="2" y="5" width="20" height="14" rx="3"/><path d="M2 10h20"/>',
+  loop:'<path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/>',
   target:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
   cal:'<rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 10h18"/>',
   chart:'<path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/>',
@@ -467,6 +468,14 @@ function goal(id){return S.goals.filter(function(g){return g.id===id;})[0];}
 function loan(id){return S.loans.filter(function(l){return l.id===id;})[0];}
 function loanActive(l){return l.pays.length<l.n;}
 function loanOwed(l){return r2(l.principal-sum(l.pays,function(p){return p.principal;}));}
+function loanSpent(L){return r2(sum(S.tx.filter(function(t){return t.loanId===L.id&&t.type==='out';}),function(t){return t.amount;}));}
+function loanAvail(L){return r2(Math.max(0,L.principal-loanSpent(L)));}
+function loansWithMoney(){return S.loans.filter(function(l){return loanAvail(l)>0.004;});}
+function loanTotals(){
+  var m={};
+  S.loans.forEach(function(l){var c=l.cur||'PEN',o=m[c]||(m[c]={owed:0,avail:0});o.owed=r2(o.owed+loanOwed(l));o.avail=r2(o.avail+loanAvail(l));});
+  return m;
+}
 function goalLoaned(g){return r2(sum(S.loans.filter(function(l){return l.goal===g.id;}),loanOwed));}
 function goalYield(g){return r2(sum(S.loans.filter(function(l){return l.goal===g.id;}),function(l){return sum(l.pays,function(p){return p.interest;});}));}
 function loanPmt(P,n,i){return i>0?P*i/(1-Math.pow(1+i,-n)):P/n;}
@@ -531,7 +540,7 @@ function payLoanCuota(L,date,amount){
   return {row:row,paid:a};
 }
 function cancelLoan(L){
-  if(L.pays.length||(L.part||0)>0)return false;
+  if(L.pays.length||(L.part||0)>0||loanSpent(L)>0.004)return false;
   var G=goal(L.goal);if(G)G.have=r2(G.have+L.principal);
   S.tx=S.tx.filter(function(t){return !(t.ref&&t.ref.k==='loandisb'&&t.ref.id===L.id);});
   S.loans=S.loans.filter(function(x){return x.id!==L.id;});
@@ -584,7 +593,13 @@ function budgetSpent(b,m){
 function goalSpent(g){return r2(sum(S.tx.filter(function(t){return t.goalId===g.id&&t.goalTaken;}),function(t){return t.goalTaken;}));}
 /* Registra un egreso. Si el presupuesto está enlazado a una meta, esa parte sale de la meta y no del disponible. */
 function addExpense(o){
-  var a=r2(o.amount),b=o.budget?budget(o.budget):null,gt=0,gid='',cur=o.cur||'PEN';
+  var a=r2(o.amount),b=o.budget?budget(o.budget):null,gt=0,gid='',cur=o.cur||'PEN',LN=o.loan?loan(o.loan):null;
+  if(o.loan&&!LN)return {err:'Ese préstamo ya no existe'};
+  if(LN){
+    if(b&&b.goal)return {err:'Un presupuesto enlazado a una meta descuenta de su meta. Elige otro presupuesto o paga con tu dinero disponible'};
+    cur=LN.cur||'PEN';
+    if(a>loanAvail(LN)+0.005)return {err:'De este préstamo solo te quedan '+money(loanAvail(LN),cur)+' por gastar'};
+  }
   if(b&&b.goal){
     var G=goal(b.goal);
     if(G){
@@ -596,6 +611,7 @@ function addExpense(o){
   }
   var t={id:uid(),ts:Date.now(),date:o.date||today(),type:'out',amount:a,cur:cur,cat:o.cat||'c_sin',note:o.note||''};
   if(b)t.budget=b.id;
+  if(LN)t.loanId=LN.id;
   if(gt>0){t.goalTaken=gt;t.goalId=gid;}
   S.tx.push(t);
   return {tx:t,goalTaken:gt};
@@ -806,7 +822,7 @@ function armBtn(btn,fn,label){
 }
 
 /* --- Movimiento personal --- */
-function sheetTx(type,budgetId){
+function sheetTx(type,budgetId,preLoan){
   var lockB=budgetId?budget(budgetId):null;
   var cats=S.cats.filter(function(c){return !c.sys;});
   var buds=lvl()>=3?S.budgets:[];
@@ -818,6 +834,7 @@ function sheetTx(type,budgetId){
     curChips('cur',startCur,'curw')+
     (lvl()>=2?'<div class="fld" id="catw"><span>Categoría</span><div class="chips">'+cats.map(function(c,i){return '<label class="chip"><input type="radio" name="cat" value="'+c.id+'" '+(i===0?'checked':'')+'><span><i style="background:'+c.color+'"></i>'+esc(c.name)+'</span></label>';}).join('')+'</div></div>':'')+
     (buds.length?'<label class="fld" id="budw"><span>Presupuesto (opcional)</span><select name="budget"><option value="">Ninguno</option>'+buds.map(function(b){return '<option value="'+b.id+'" '+(b.id===budgetId?'selected':'')+'>'+esc(b.name)+' (quedan '+money(budgetAmount(b,S.ui.month)-budgetSpent(b,S.ui.month),budgetCur(b))+')</option>';}).join('')+'</select><small id="bhint" class="neu"></small></label>':'')+
+    (loansWithMoney().length?'<label class="fld" id="loanw"><span>Pagar con</span><select name="loan"><option value="">Mi dinero disponible</option>'+loansWithMoney().map(function(l){return '<option value="'+l.id+'" '+(l.id===preLoan?'selected':'')+'>Préstamo de '+esc(l.goalName)+' (quedan '+money(loanAvail(l),l.cur||'PEN')+')</option>';}).join('')+'</select><small id="lhint" class="neu"></small></label>':'')+
     (hasPct&&!lockB?'<div class="fld" id="autow"><span>Metas con porcentaje</span><label class="chip"><input type="checkbox" name="auto" checked><span>Apartar su % de este ingreso</span></label></div>':'')+
     '<label class="fld"><span>Nota</span><input name="note" placeholder="Opcional" autocomplete="off"></label>'+
     '<label class="fld"><span>Fecha</span><input type="date" name="date" value="'+today()+'"></label>'+
@@ -834,24 +851,34 @@ function sheetTx(type,budgetId){
       commit(parts.length?'Ingreso registrado. Se apartó '+parts.map(function(p){return money(p.amt,p.g.cur)+' para '+p.g.name;}).join(' y '):'Ingreso registrado');
       return;
     }
-    var res=addExpense({date:date,amount:a,cur:cur,cat:fd.get('cat')||'c_sin',note:note,budget:fd.get('budget')||''});
+    var res=addExpense({date:date,amount:a,cur:cur,cat:fd.get('cat')||'c_sin',note:note,budget:fd.get('budget')||'',loan:fd.get('loan')||''});
     if(res.err)return fail(res.err);
-    commit(res.goalTaken>0?'Gasto registrado. Se descontó de tu meta':'Egreso registrado');
+    commit(res.tx.loanId?'Gasto pagado con el préstamo. Te quedan '+money(loanAvail(loan(res.tx.loanId)),res.tx.cur)+' por gastar':res.goalTaken>0?'Gasto registrado. Se descontó de tu meta':'Egreso registrado');
   },function(f){
     function sync(){
       var c=$('input[name=type]:checked',f);var inc=!!c&&c.value==='in';
-      ['#catw','#budw'].forEach(function(sel){var w=$(sel,f);if(w)w.hidden=inc;});
+      ['#catw','#budw','#loanw'].forEach(function(sel){var w=$(sel,f);if(w)w.hidden=inc;});
       var aw=$('#autow',f);if(aw)aw.hidden=!inc;
     }
     function hint(){
       var sb=$('[name=budget]',f),el=$('#bhint',f);
-      if(!sb||!el)return;
-      var b=sb.value?budget(sb.value):null,G=b&&b.goal?goal(b.goal):null;
+      var b=sb&&sb.value?budget(sb.value):null,G=b&&b.goal?goal(b.goal):null;
+      if(!el)el={};
       if(G){
         var gc=G.cur||'PEN';
         el.textContent='Tope: lo que hay en la meta «'+G.name+'» ('+money(G.have,gc)+'). El gasto sale de la meta y baja su avance.';
         var r=$('input[name=cur][value='+gc+']',f);if(r)r.checked=true;
       }else el.textContent='';
+      var sl=$('[name=loan]',f),lh=$('#lhint',f);
+      if(sl&&lh){
+        if(G){sl.value='';sl.disabled=true;lh.textContent='Este presupuesto descuenta de su meta, así que no se combina con un préstamo.';}
+        else{
+          sl.disabled=false;
+          var LN=sl.value?loan(sl.value):null;
+          if(LN){var lc=LN.cur||'PEN';lh.textContent='El gasto baja lo que te queda por gastar de este préstamo (máximo '+money(loanAvail(LN),lc)+').';var r2b=$('input[name=cur][value='+lc+']',f);if(r2b)r2b.checked=true;}
+          else lh.textContent='';
+        }
+      }
     }
     f.addEventListener('change',function(){sync();hint();});
     sync();hint();
@@ -863,7 +890,7 @@ function sheetTxDetail(id){
   var c=catOf(t.cat),lock=txLocked(t);
   var what=t.ref?(t.ref.k==='debt'?'una deuda':t.ref.k==='goal'?'una meta':t.ref.k==='fx'?'un cambio de moneda (se elimina también su pareja)':'un préstamo desde una meta'):'';
   var body=kv('Monto','<span class="'+(t.type==='in'?'pos':'neg')+'">'+(t.type==='in'?'+':'−')+money(t.amount,t.cur)+'</span>')+kv('Fecha',fdate(t.date))+
-    (t.type==='out'?kv('Categoría',esc(c.name)):'')+(t.budget&&budget(t.budget)?kv('Presupuesto',esc(budget(t.budget).name)):'')+(t.goalTaken?kv('Pagado con dinero de tu meta',money(t.goalTaken,t.cur)):'')+(t.note?kv('Nota',esc(t.note)):'')+
+    (t.type==='out'?kv('Categoría',esc(c.name)):'')+(t.budget&&budget(t.budget)?kv('Presupuesto',esc(budget(t.budget).name)):'')+(t.goalTaken?kv('Pagado con dinero de tu meta',money(t.goalTaken,t.cur)):'')+(t.loanId&&loan(t.loanId)?kv('Pagado con el préstamo de',esc(loan(t.loanId).goalName)):'')+(t.note?kv('Nota',esc(t.note)):'')+
     (lock?'<p class="neu" style="margin-top:10px">'+lock+'</p>':
       (t.ref?'<p class="neu" style="margin-top:10px">Este movimiento está vinculado a '+what+'. Si lo eliminas, se revierte.</p>':'')+
       '<button type="button" class="btn danger" id="del">Eliminar movimiento</button>');
@@ -1082,6 +1109,11 @@ function sheetLoan(gid){
     f.addEventListener('input',upd);upd();
   });
 }
+function loanSpendList(L,M){
+  var tx=S.tx.filter(function(t){return t.loanId===L.id&&t.type==='out';});
+  if(!tx.length)return '';
+  return '<h4>Gastos pagados con este préstamo</h4>'+tx.map(function(t){return '<div class="kv"><span>'+fdate(t.date)+' · '+esc(t.note||catOf(t.cat).name)+'</span><b>'+M(t.amount)+'</b></div>';}).join('');
+}
 function loanPayList(L,M){
   var tx=S.tx.filter(function(t){return t.ref&&t.ref.k==='loan'&&t.ref.id===L.id;});
   if(!tx.length)return '';
@@ -1112,13 +1144,16 @@ function sheetLoanDetail(id){
   if(!L)return;
   var sc=loanSchedule(L),done=!loanActive(L);
   var totInt=r2(sum(sc,function(x){return x.interest;}));
-  var body=kv('Meta',esc(L.goalName))+kv('Monto prestado',M(L.principal))+kv('Tasa mensual',L.rate+'%')+kv('Cuotas pagadas',L.pays.length+' de '+L.n)+
+  var spent=loanSpent(L),avail=loanAvail(L);
+  var body=kv('Meta',esc(L.goalName))+kv('Monto prestado',M(L.principal))+kv('Gastado con este préstamo',M(spent))+kv('Te queda por gastar','<span class="num pos">'+M(avail)+'</span>')+kv('Debes devolver (capital)',M(loanOwed(L)))+kv('Tasa mensual',L.rate+'%')+kv('Cuotas pagadas',L.pays.length+' de '+L.n)+
     kv('Interés total',M(totInt))+kv('Interés ya devuelto a tu meta','<span class="pos">'+M(sum(L.pays,function(p){return p.interest;}))+'</span>')+
     '<h4>Cronograma</h4><div class="tr4 hd"><span>N.º</span><span>Vence</span><b>Cuota</b><span>Interés</span></div>'+
     sc.map(function(r,i){var paid=i<L.pays.length,cur=i===L.pays.length&&(L.part||0)>0;return '<div class="tr4 '+(paid?'pos':'')+'"><span>'+r.k+'</span><span>'+fdate(r.date)+(paid?' (pagada)':cur?' (abonado '+M(L.part)+')':'')+'</span><b>'+M(r.cuota)+'</b><span>'+M(r.interest)+'</span></div>';}).join('')+
+    (avail>0.004?'<button type="button" class="btn block" id="spb" style="margin-top:14px">Registrar un gasto con este préstamo</button>':'')+
+    loanSpendList(L,M)+
     (loanPayList(L,M))+
     (done?'':'<button type="button" class="btn primary" id="payb" style="margin-top:14px">Pagar cuota '+(L.pays.length+1)+' (faltan '+M(loanDue(L))+')</button><button type="button" class="btn block" id="partb">Pagar solo una parte</button>')+
-    ((L.pays.length||(L.part||0)>0)?'':'<button type="button" class="btn danger" id="del">Cancelar préstamo</button>');
+    ((L.pays.length||(L.part||0)>0)?'':spent>0.004?'<p class="neu" style="margin-top:12px">No puedes cancelar este préstamo porque ya gastaste parte de su dinero.</p>':'<button type="button" class="btn danger" id="del">Cancelar préstamo</button>');
   openSheet('Préstamo desde meta',body,null,function(f){
     var pb=$('#payb',f);
     if(pb)pb.addEventListener('click',function(){
@@ -1127,7 +1162,8 @@ function sheetLoanDetail(id){
       closeSheet();commit('Cuota '+L.pays.length+' de '+L.n+' pagada');
     });
     var pt=$('#partb',f);if(pt)pt.addEventListener('click',function(){sheetPayLoan(id);});
-    if(!L.pays.length&&!(L.part||0))armBtn($('#del',f),function(){if(cancelLoan(L)){closeSheet();commit('Préstamo cancelado. El dinero volvió a tu meta');}});
+    var sp=$('#spb',f);if(sp)sp.addEventListener('click',function(){sheetTx('out',null,id);});
+    if(!L.pays.length&&!(L.part||0)&&spent<0.005)armBtn($('#del',f),function(){if(cancelLoan(L)){closeSheet();commit('Préstamo cancelado. El dinero volvió a tu meta');}});
   });
 }
 function sheetSalesGoal(){
@@ -1656,7 +1692,7 @@ function sheetQuick(){
 /* ============ Pantallas: Personal ============ */
 function txRow(t){
   var c=catOf(t.cat);
-  return '<button class="item" data-a="tx" data-id="'+t.id+'"><span class="dot" style="background:'+c.color+'"></span><span class="grow"><b>'+esc(t.note||c.name)+'</b><small>'+fdate(t.date)+(lvl()>=2&&t.type==='out'&&t.note?' &nbsp;'+esc(c.name):'')+(t.goalTaken?' &nbsp;Con dinero de tu meta':'')+'</small></span><span class="amt num '+(t.type==='in'?'pos':'neg')+'">'+(t.type==='in'?'+':'−')+money(t.amount,t.cur)+'</span></button>';
+  return '<button class="item" data-a="tx" data-id="'+t.id+'"><span class="dot" style="background:'+c.color+'"></span><span class="grow"><b>'+esc(t.note||c.name)+'</b><small>'+fdate(t.date)+(lvl()>=2&&t.type==='out'&&t.note?' &nbsp;'+esc(c.name):'')+(t.goalTaken?' &nbsp;Con dinero de tu meta':'')+(t.loanId?' &nbsp;Con dinero de un préstamo':'')+'</small></span><span class="amt num '+(t.type==='in'?'pos':'neg')+'">'+(t.type==='in'?'+':'−')+money(t.amount,t.cur)+'</span></button>';
 }
 function trRow(t){
   var into=t.dir==='b2p';
@@ -1786,20 +1822,30 @@ function pGoals(){
       (lo>0.004?'<small class="warn">Prestado a tu presupuesto '+money(lo,C)+'</small>':'')+(yl>0.004?'<small class="pos">Rendimiento ganado '+money(yl,C)+'</small>':'')+(gs>0.004?'<small class="neu">Usaste '+money(gs,C)+' en gastos de presupuestos enlazados</small>':'')+'</span>'+
       '<span class="btns">'+(g.have>0.005?'<button class="btn sm tint" data-a="loanreq" data-id="'+g.id+'">Pedir prestado</button>':'')+(rem>0.005?'<button class="btn sm tint" data-a="contrib" data-id="'+g.id+'">Aportar</button>':'')+'</span></div></div>';
   });
-  if(S.loans.length){
-    h+='<h4>Préstamos desde tus metas</h4>';
-    S.loans.slice().sort(function(a,b){return loanActive(b)-loanActive(a);}).forEach(function(l){
-      var C=l.cur||'PEN';
-      var sc=loanSchedule(l),done=!loanActive(l),nx=done?null:sc[l.pays.length];
-      var totInt=r2(sum(sc,function(x){return x.interest;}));
-      h+='<div class="card" data-a="loan" data-id="'+l.id+'" role="button" tabindex="0" style="cursor:pointer"><div class="item" style="padding:0;border:0"><span class="grow"><b>'+esc(l.goalName)+'</b><small>Prestaste '+money(l.principal,C)+' en '+l.n+' cuotas al '+l.rate+'% mensual</small></span>'+(done?'<span class="tag pos">Pagado</span>':'<span class="tag">'+l.pays.length+' de '+l.n+'</span>')+'</div>'+
-        '<div class="bar" aria-hidden="true"><i style="width:'+(l.pays.length/l.n*100).toFixed(1)+'%"></i></div>'+
-        '<div class="item" style="padding:0;border:0"><span class="grow">'+(done?'<small>Devolviste todo, con '+money(totInt,C)+' de rendimiento para tu meta</small>':'<small>Cuota '+money(nx.cuota,C)+', vence el '+fdate(nx.date)+'</small>'+((l.part||0)>0?'<small>Ya abonaste '+money(l.part,C)+'. Faltan '+money(loanDue(l),C)+' de esta cuota</small>':'')+'<small>Te falta devolver '+money(loanOwed(l),C)+' de capital</small>')+'</span>'+
-        (done?'':'<button class="btn sm tint" data-a="payloan" data-id="'+l.id+'">Pagar</button>')+'</div></div>';
-    });
-  }else{
-    h+='<p class="neu" style="text-align:center;margin:0 0 12px">Toca una meta para ver su historial mensual.</p><div class="card hint"><h3>Autorrendimiento</h3><p>Si necesitas dinero de una meta, pídelo prestado: lo devuelves en cuotas con interés, como un préstamo del banco, y ese interés se queda en tu meta.</p></div>';
-  }
+  var act=S.loans.filter(loanActive).length;
+  if(S.loans.length)h+='<button class="btn block" data-a="tab" data-v="loans">Ver mis préstamos'+(act?' ('+act+' activo'+(act>1?'s':'')+')':'')+'</button>';
+  h+='<p class="neu" style="text-align:center;margin:12px 0">Toca una meta para ver su historial mensual.</p>';
+  if(!S.loans.length)h+='<div class="card hint"><h3>Autorrendimiento</h3><p>Si necesitas dinero de una meta, pídelo prestado: lo devuelves en cuotas con interés, como un préstamo del banco, y ese interés se queda en tu meta. Verás tus préstamos en la pestaña Préstamos.</p></div>';
+  return h;
+}
+function pLoans(){
+  var owed=sum(S.loans,function(l){return toBase(loanOwed(l),l.cur);}),avail=sum(S.loans,function(l){return toBase(loanAvail(l),l.cur);});
+  var earned=sum(S.loans,function(l){return toBase(sum(l.pays,function(p){return p.interest;}),l.cur);});
+  var multi=S.loans.some(function(l){return (l.cur||'PEN')!=='PEN';});
+  var h=hero('Debes devolver a tus metas'+(multi?' (en soles)':''),money(owed),[['Te queda por gastar',money(avail)],['Rendimiento ganado',money(earned)]]);
+  if(!S.loans.length)return h+empty('Aún no tienes préstamos','Entra a Metas y toca «Pedir prestado» en una meta con dinero. Lo devuelves en cuotas con interés, y ese interés se queda en tu meta.');
+  var lt=loanTotals(),lk=Object.keys(lt);
+  if(lk.length>1)h+='<div class="card"><h3>Saldo por moneda</h3>'+lk.map(function(c){return kv('Te queda por gastar ('+c+')','<span class="num pos">'+money(lt[c].avail,c)+'</span>')+kv('Debes devolver ('+c+')','<span class="num">'+money(lt[c].owed,c)+'</span>');}).join('')+'</div>';
+  h+='<p class="neu" style="margin:0 0 12px">Al agregar un gasto, elige «Pagar con» para usar el dinero de un préstamo.</p>';
+  S.loans.slice().sort(function(a,b){return loanActive(b)-loanActive(a);}).forEach(function(l){
+    var C=l.cur||'PEN';
+    var sc=loanSchedule(l),done=!loanActive(l),nx=done?null:sc[l.pays.length];
+    var totInt=r2(sum(sc,function(x){return x.interest;}));
+    h+='<div class="card" data-a="loan" data-id="'+l.id+'" role="button" tabindex="0" style="cursor:pointer"><div class="item" style="padding:0;border:0"><span class="grow"><b>'+esc(l.goalName)+'</b><small>Prestaste '+money(l.principal,C)+' en '+l.n+' cuotas al '+l.rate+'% mensual</small></span>'+(done?'<span class="tag pos">Pagado</span>':'<span class="tag">'+l.pays.length+' de '+l.n+'</span>')+'</div>'+
+      '<div class="bar" aria-hidden="true"><i style="width:'+(l.pays.length/l.n*100).toFixed(1)+'%"></i></div>'+
+      '<div class="item" style="padding:0;border:0"><span class="grow">'+(done?'<small>Devolviste todo, con '+money(totInt,C)+' de rendimiento para tu meta</small>':'<small>Cuota '+money(nx.cuota,C)+', vence el '+fdate(nx.date)+'</small>'+((l.part||0)>0?'<small>Ya abonaste '+money(l.part,C)+'. Faltan '+money(loanDue(l),C)+' de esta cuota</small>':'')+'<small>Te falta devolver '+money(loanOwed(l),C)+' de capital</small>')+'<small>Te queda por gastar '+money(loanAvail(l),C)+' del préstamo</small></span>'+
+      (done?'':'<button class="btn sm tint" data-a="payloan" data-id="'+l.id+'">Pagar</button>')+'</div></div>';
+  });
   return h;
 }
 function pBudgets(){
@@ -2007,9 +2053,9 @@ function viewSettings(){
 /* ============ Estructura general ============ */
 function tabs(){
   if(S.ui.account==='personal'){
-    var t=[['home','Dashboard','chart'],['moves','Movimientos','list']];
+    var t=[['home','Inicio','chart'],['moves','Movim.','list']];
     if(lvl()>=2)t.push(['debts','Deudas','card']);
-    if(lvl()>=3)t.push(['goals','Metas','target'],['budgets','Presupuestos','cal']);
+    if(lvl()>=3)t.push(['goals','Metas','target'],['loans','Préstamos','loop'],['budgets','Presup.','cal']);
     return t;
   }
   return [['dash','Dashboard','chart'],['prods','Productos','box'],['sales','Ventas','tag'],['buys','Compras','bag'],['accts','Cuentas','users']];
@@ -2034,7 +2080,7 @@ function fabLabel(){
 function fab(){var l=fabLabel();return l?'<button class="fab" data-a="fab" aria-label="'+l+'">'+ic('plus',26)+'</button>':'';}
 function screen(){
   var a=S.ui.account,t=S.ui.tab[a];
-  var map={personal:{home:pHome,moves:pMoves,debts:pDebts,goals:pGoals,budgets:pBudgets},business:{dash:bDash,prods:bProds,sales:bSales,buys:bBuys,accts:bAccts}};
+  var map={personal:{home:pHome,moves:pMoves,debts:pDebts,goals:pGoals,loans:pLoans,budgets:pBudgets},business:{dash:bDash,prods:bProds,sales:bSales,buys:bBuys,accts:bAccts}};
   return map[a][t]();
 }
 function ensureAccess(){
