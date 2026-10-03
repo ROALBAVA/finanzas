@@ -176,6 +176,19 @@ h4{margin:18px 0 8px;font-size:14px;color:var(--mut);font-weight:600}
 .nav button.on{color:var(--accT);font-weight:600}
 .fab{position:fixed;right:max(16px,calc(50% - 244px));bottom:calc(84px + env(safe-area-inset-bottom,0px));width:56px;height:56px;border-radius:18px;background:var(--acc);color:var(--onacc);display:grid;place-items:center;box-shadow:0 6px 18px rgba(0,0,0,.25);z-index:31}
 
+
+/* PIN y respaldo */
+.lockw{display:flex;flex-direction:column;align-items:center;text-align:center;padding:max(32px,9vh) 0 24px}
+.pdots{display:flex;gap:14px;margin:18px 0 26px}
+.pdots i{width:16px;height:16px;border-radius:50%;border:2px solid var(--accT)}
+.pdots i.on{background:var(--accT)}
+.pad{display:grid;grid-template-columns:repeat(3,76px);gap:14px;margin-bottom:22px}
+.pad button{height:76px;border-radius:50%;border:1px solid var(--line);background:var(--sf);color:var(--ink);font:600 26px/1 inherit;font-family:inherit}
+.pad button:active{background:var(--sf2)}
+.pad span{display:block}
+.bkbar{display:flex;gap:8px;margin-top:10px}
+.bkbar .btn{width:auto;flex:1;margin:0}
+
 /* Hojas inferiores */
 #sheet{position:fixed;inset:0;z-index:50;display:none}
 #sheet.open{display:block}
@@ -289,7 +302,7 @@ function norm(s){
   o.ui.tab=Object.assign({personal:'home',business:'dash'},ui.tab||{});
   ['cats','tx','debts','goals','transfers','products','contacts','purchases','sales','loans','budgets'].forEach(function(k){if(!Array.isArray(o[k]))o[k]=[];});
   if(!o.plans||typeof o.plans!=='object')o.plans={};
-  o.settings=Object.assign({loanRate:1.5,salesGoal:0,lastCur:'PEN'},o.settings||{});
+  o.settings=Object.assign({loanRate:1.5,salesGoal:0,lastCur:'PEN',since:today()},o.settings||{});
   o.settings.rates=Object.assign({USD:3.75,EUR:4.3},o.settings.rates||{});
   o.debts.forEach(function(d){if(d.capital==null)d.capital=d.total;});
   o.loans.forEach(function(l){l.pays=l.pays||[];l.part=l.part||0;});
@@ -311,6 +324,12 @@ function save(){
   try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){canSave=false;}
 }
 var S=load();
+/* PIN opcional: protege contra curiosos; no cifra los datos. */
+var locked=!!(S.settings&&S.settings.pin),pinBuf='',pinFails=0,pinWait=0,hiddenAt=0;
+function h53(str){var h1=0xdeadbeef,h2=0x41c6ce57,i,ch;for(i=0;i<str.length;i++){ch=str.charCodeAt(i);h1=Math.imul(h1^ch,2654435761);h2=Math.imul(h2^ch,1597334677);}h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909);h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);return (4294967296*(2097151&h2)+(h1>>>0)).toString(36);}
+function pinHash(pin,salt){return h53(salt+':'+pin+':'+salt);}
+function setPin(pin){var salt=String(Math.random()).slice(2)+Date.now().toString(36);S.settings.pinSalt=salt;S.settings.pin=pinHash(pin,salt);}
+function checkPin(pin){return !!S.settings.pin&&pinHash(pin,S.settings.pinSalt||'')===S.settings.pin;}
 
 function lvl(){return LV[S.level]||1;}
 function hasP(){return S.plan!=='business';}
@@ -1488,32 +1507,145 @@ function sheetBudgetDetail(id){
   });
 }
 
-/* --- Exportar / importar --- */
+/* --- Respaldo --- */
+function backupName(){return 'respaldo-finanzas-'+today()+'.json';}
+function backupJSON(){
+  var o=Object.assign({},S,{exportedAt:new Date().toISOString()});
+  o.settings=Object.assign({},S.settings);delete o.settings.pin;delete o.settings.pinSalt;
+  return JSON.stringify(o);
+}
+function markBackup(){S.settings.lastBackup=today();S.settings.snooze='';save();render();}
+function hasData(){return S.tx.length>0||S.sales.length>0||S.purchases.length>0||S.goals.length>0||S.debts.length>0||S.transfers.length>0;}
+function plusDays(n){var d=new Date(today()+'T00:00:00');d.setDate(d.getDate()+n);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+function backupAge(){var b=S.settings.lastBackup||S.settings.since||today();return daysAgo(b);}
+function backupDue(){
+  if(!hasData())return false;
+  if(S.settings.snooze&&S.settings.snooze>today())return false;
+  return backupAge()>=14;
+}
+function backupBanner(){
+  if(!backupDue())return '';
+  var n=backupAge();
+  var txt=S.settings.lastBackup?'Hace '+n+' días que no guardas un respaldo.':'Todavía no has guardado un respaldo de tus datos.';
+  return '<div class="banner"><b>'+txt+'</b><br>Si cambias de celular o borras el navegador, perderías todo lo que registraste.<div class="bkbar"><button class="btn primary" data-a="export">Guardar ahora</button><button class="btn" data-a="bksnooze">Más tarde</button></div></div>';
+}
+function lastBackupText(){return S.settings.lastBackup?'Último respaldo: '+fdate(S.settings.lastBackup)+(backupAge()>0?' (hace '+backupAge()+' días)':' (hoy)'):'Todavía no has guardado un respaldo.';}
+function downloadBackup(){
+  try{
+    var blob=new Blob([backupJSON()],{type:'application/json'}),u=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=u;a.download=backupName();document.body.appendChild(a);a.click();document.body.removeChild(a);
+    setTimeout(function(){URL.revokeObjectURL(u);},2000);
+    markBackup();toast('Respaldo descargado');
+  }catch(e){toast('No se pudo descargar. Usa Copiar texto');}
+}
+function shareBackup(){
+  var json=backupJSON(),done=function(){markBackup();toast('Respaldo guardado');};
+  try{
+    if(typeof File==='function'&&navigator.canShare&&navigator.share){
+      var file=new File([json],backupName(),{type:'application/json'});
+      if(navigator.canShare({files:[file]})){navigator.share({files:[file],title:'Respaldo de Finanzas'}).then(done,function(){});return;}
+    }
+    if(navigator.share){navigator.share({title:'Respaldo de Finanzas',text:json}).then(done,function(){});return;}
+  }catch(e){}
+  downloadBackup();
+}
 function sheetExport(){
-  var body='<p class="neu">Copia este texto y guárdalo donde quieras. Sirve para restaurar tus datos en otro dispositivo o navegador.</p>'+
-    '<label class="fld"><span>Respaldo (JSON)</span><textarea id="exp" readonly></textarea></label>'+
-    '<button type="button" class="btn primary" id="cp">Copiar respaldo</button>';
-  openSheet('Exportar respaldo',body,null,function(f){
-    var ta=$('#exp',f);ta.value=JSON.stringify(S);
+  var body='<p class="neu">'+lastBackupText()+'</p>'+
+    '<p class="neu">Guarda el respaldo donde no se pierda: envíatelo por WhatsApp o correo, o guárdalo en tu Drive. Sirve para recuperar todo en otro celular o navegador. Por seguridad no incluye tu PIN.</p>'+
+    '<button type="button" class="btn primary" id="bsh">Compartir respaldo</button>'+
+    '<button type="button" class="btn block" id="bdl" style="margin-top:8px">Descargar archivo</button>'+
+    '<label class="fld" style="margin-top:14px"><span>O copia el texto del respaldo</span><textarea id="exp" readonly></textarea></label>'+
+    '<button type="button" class="btn block" id="cp">Copiar texto</button>';
+  openSheet('Guardar respaldo',body,null,function(f){
+    var ta=$('#exp',f);ta.value=backupJSON();
+    $('#bsh',f).addEventListener('click',shareBackup);
+    $('#bdl',f).addEventListener('click',downloadBackup);
     $('#cp',f).addEventListener('click',function(){
       ta.select();
-      var done=function(){toast('Respaldo copiado');};
+      var done=function(){markBackup();toast('Respaldo copiado');};
       if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(ta.value).then(done,function(){try{document.execCommand('copy');done();}catch(e){toast('Selecciona el texto y cópialo manualmente');}});}
       else{try{document.execCommand('copy');done();}catch(e){toast('Selecciona el texto y cópialo manualmente');}}
     });
   });
 }
+function stashPrev(){try{localStorage.setItem(KEY+'.prev',JSON.stringify({at:new Date().toISOString(),data:S}));}catch(e){}}
+function readPrev(){try{var r=localStorage.getItem(KEY+'.prev');return r?JSON.parse(r):null;}catch(e){return null;}}
+function keepPin(o){if(S.settings.pin){o.settings.pin=S.settings.pin;o.settings.pinSalt=S.settings.pinSalt;}else{delete o.settings.pin;delete o.settings.pinSalt;}return o;}
+function backupSummary(o){
+  var d=o.exportedAt?fdate(o.exportedAt.slice(0,10)):'sin fecha';
+  return kv('Guardado el',d)+kv('Movimientos',(o.tx||[]).length)+kv('Metas',(o.goals||[]).length)+kv('Deudas',(o.debts||[]).length)+kv('Ventas',(o.sales||[]).length)+kv('Compras',(o.purchases||[]).length);
+}
 function sheetImport(){
-  var body='<p class="neu">Pega aquí un respaldo exportado antes. Esto reemplaza los datos actuales.</p>'+
-    '<label class="fld"><span>Respaldo (JSON)</span><textarea name="json" autofocus></textarea></label>'+
-    '<button class="btn primary">Restaurar datos</button>';
-  openSheet('Importar respaldo',body,function(fd){
+  var body='<p class="neu">Elige el archivo de respaldo o pega su texto. Antes de reemplazar nada verás un resumen.</p>'+
+    '<label class="fld"><span>Archivo de respaldo</span><input type="file" id="impf" accept=".json,application/json,text/plain"></label>'+
+    '<label class="fld"><span>O pega el respaldo (JSON)</span><textarea name="json"></textarea></label>'+
+    '<button class="btn primary">Continuar</button>';
+  openSheet('Restaurar respaldo',body,function(fd){
+    var o;
     try{
-      var o=JSON.parse(String(fd.get('json')||''));
+      o=JSON.parse(String(fd.get('json')||''));
       if(!o||typeof o!=='object'||!Array.isArray(o.tx))throw new Error('x');
-      S=norm(o);S.ui.view=null;S.ui.month=mk(today());S.ui.welcomed=true;
-      commit('Datos restaurados');
     }catch(e){return fail('El texto no parece un respaldo válido');}
+    openSheet('¿Reemplazar tus datos?','<p class="neu">Este respaldo contiene:</p>'+backupSummary(o)+
+      '<p class="neu" style="margin-top:12px">Se reemplazarán los datos actuales. Antes guardo una copia por si te arrepientes; podrás deshacerlo desde Ajustes.</p>'+
+      '<button class="btn primary">Reemplazar mis datos</button>',function(){
+        stashPrev();
+        var n=norm(o);keepPin(n);
+        S=n;S.ui.view=null;S.ui.month=mk(today());S.ui.welcomed=true;
+        commit('Datos restaurados');
+      });
+    return false;
+  },function(f){
+    var inp=$('#impf',f);
+    if(inp)inp.addEventListener('change',function(){
+      var fl=inp.files&&inp.files[0];if(!fl)return;
+      var rd=new FileReader();rd.onload=function(){$('[name=json]',f).value=String(rd.result||'');toast('Archivo cargado. Toca Continuar');};rd.readAsText(fl);
+    });
+  });
+}
+/* --- PIN --- */
+function sheetPin(mode){
+  var title=mode==='on'?'Activar PIN':mode==='change'?'Cambiar PIN':'Quitar PIN';
+  function fld(n,l,af){return '<label class="fld"><span>'+l+'</span><input type="password" name="'+n+'" inputmode="numeric" maxlength="4" autocomplete="off"'+(af?' autofocus':'')+'></label>';}
+  var body=(mode==='on'?'<p class="neu">Elige un PIN de 4 dígitos. Si lo olvidas, solo se puede quitar borrando los datos de este dispositivo, así que guarda antes un respaldo.</p>':'')+
+    (mode!=='on'?fld('cur','PIN actual',true):'')+
+    (mode!=='off'?fld('n1','PIN nuevo (4 dígitos)',mode==='on')+fld('n2','Repite el PIN nuevo'):'')+
+    '<button class="btn primary">'+(mode==='off'?'Quitar PIN':'Guardar PIN')+'</button>';
+  openSheet(title,body,function(fd){
+    if(mode!=='on'&&!checkPin(String(fd.get('cur')||'')))return fail('El PIN actual no es correcto');
+    if(mode==='off'){delete S.settings.pin;delete S.settings.pinSalt;locked=false;commit('PIN quitado');return;}
+    var a=String(fd.get('n1')||''),b=String(fd.get('n2')||'');
+    if(!/^\d{4}$/.test(a))return fail('El PIN debe tener 4 números');
+    if(a!==b)return fail('Los dos PIN no coinciden');
+    setPin(a);commit('PIN activado');
+  });
+}
+function pinPress(d){
+  if(!locked)return;
+  if(Date.now()<pinWait){toast('Espera unos segundos');return;}
+  if(pinBuf.length<4)pinBuf+=d;
+  if(pinBuf.length===4){
+    if(checkPin(pinBuf)){locked=false;pinBuf='';pinFails=0;render();return;}
+    pinFails++;pinBuf='';
+    if(pinFails>=5){pinWait=Date.now()+30000;pinFails=0;toast('Demasiados intentos. Espera 30 segundos');}
+    else toast('PIN incorrecto');
+  }
+  render();
+}
+function viewLock(){
+  var keys=['1','2','3','4','5','6','7','8','9','','0','⌫'];
+  return '<div class="lockw"><h1 class="big" style="font-size:26px;margin:0 0 4px">Ingresa tu PIN</h1><p class="neu" style="margin:0">Tus finanzas están protegidas</p>'+
+    '<div class="pdots" aria-label="'+pinBuf.length+' de 4 dígitos">'+[0,1,2,3].map(function(i){return '<i class="'+(i<pinBuf.length?'on':'')+'"></i>';}).join('')+'</div>'+
+    '<div class="pad">'+keys.map(function(k){return k===''?'<span></span>':'<button type="button" data-a="'+(k==='⌫'?'pdel':'pk')+'" data-v="'+k+'" aria-label="'+(k==='⌫'?'Borrar':k)+'">'+k+'</button>';}).join('')+'</div>'+
+    '<button class="btn" data-a="pforgot" style="width:auto">Olvidé mi PIN</button></div>';
+}
+function sheetForgotPin(){
+  openSheet('¿Olvidaste tu PIN?','<p class="neu">El PIN no se puede recuperar. La única forma de entrar es borrar los datos de este dispositivo y quitar el PIN. Si tienes un respaldo, podrás restaurarlo después desde Ajustes.</p><button type="button" class="btn danger" id="wp">Borrar todo y quitar el PIN</button>',null,function(f){
+    armBtn($('#wp',f),function(){
+      try{localStorage.removeItem(KEY+'.prev');}catch(e){}
+      S=norm({plan:S.plan,level:S.level});S.ui.welcomed=true;S.ui.view='settings';locked=false;pinBuf='';
+      closeSheet();commit('Datos borrados y PIN quitado');
+    },'Toca otra vez para borrar todo');
   });
 }
 function sheetQuick(){
@@ -1850,7 +1982,8 @@ function viewWelcome(){
 function viewSettings(){
   var plans=[['both','Personal + Empresa','Acceso a las dos cuentas y a las transferencias.'],['personal','Solo Personal','Solo la cuenta personal.'],['business','Solo Empresa','Solo la cuenta de negocio.']];
   var levels=[['basic','Básico','Ingresos, egresos y balance.'],['control','Control','Categorías, gráfico de gastos y deudas.'],['planning','Planificación','Metas, presupuestos y plan mensual.']];
-  var h='<h4>Plan de acceso (simulado)</h4>'+plans.map(function(p){return '<button class="opt '+(S.plan===p[0]?'on':'')+'" data-a="setplan" data-v="'+p[0]+'"><span><b>'+p[1]+'</b><small>'+p[2]+'</small></span></button>';}).join('');
+  var planName=(plans.filter(function(p){return p[0]===S.plan;})[0]||plans[0])[1];
+  var h='<h4>Cuentas</h4><div class="card"><p style="margin:0 0 10px">Estás usando: <b>'+planName+'</b>.</p><button class="btn block" data-a="welcome">Cambiar cuentas o nivel</button></div>';
   var pals=[['classic','Clásico','Azul en Personal y verde en Empresa.','#2450D6','#0C6B58'],['blue','Azul','Todo en tonos azules.','#0B63C8','#7DB8FF'],['pink','Rosado','Todo en tonos rosados.','#C72A6E','#FF8FBA'],['duo','Azul y rosado','Azul en Personal y rosado en Empresa.','#0B63C8','#C72A6E'],['rosepastel','Rosado pastel','Fondo rosa suave con letras oscuras, buen contraste.','#FCEEF3','#B83A6B'],['gold','Negro y dorado','Fondo negro con detalles dorados.','#0B0B0C','#D4AF37'],['sage','Salvia','Verdes suaves, descansa la vista.','#EEF2EC','#4F7A64'],['calm','Noche calma','Oscuro azul grisáceo, sin brillos fuertes. Ideal para concentrarte.','#1B2229','#6FB3C0']];
   h+='<h4>Colores de la app</h4>'+pals.map(function(p){return '<button class="opt '+((S.ui.pal||'classic')===p[0]?'on':'')+'" data-a="setpal" data-v="'+p[0]+'"><span style="flex:1"><b>'+p[1]+'</b><small>'+p[2]+'</small></span><span style="display:flex;gap:4px"><i style="width:18px;height:18px;border-radius:50%;border:1px solid var(--line);background:'+p[3]+'"></i><i style="width:18px;height:18px;border-radius:50%;background:'+p[4]+'"></i></span></button>';}).join('');
   h+='<h4>Nivel de gestión personal</h4>'+levels.map(function(p){return '<button class="opt '+(S.level===p[0]?'on':'')+'" data-a="setlevel" data-v="'+p[0]+'"><span><b>'+p[1]+'</b><small>'+p[2]+'</small></span></button>';}).join('');
@@ -1861,8 +1994,11 @@ function viewSettings(){
       '<label class="fld"><span>Cuenta dentro del plan mensual como</span><select id="ncblock"><option value="obligatorio">Gasto obligatorio</option><option value="variable">Gasto variable</option></select></label>'+
       '<button class="btn block" data-a="addcat">Agregar categoría</button></div>';
   }
-  h+='<h4>Datos</h4><div class="card"><p>Tus datos se guardan en este dispositivo y navegador. Exporta un respaldo de vez en cuando.</p>'+
-    '<button class="btn block" data-a="export">Exportar respaldo</button><button class="btn block" data-a="import">Importar respaldo</button>'+
+  var pv=readPrev();
+  h+='<h4>Seguridad</h4><div class="card"><p>Un PIN de 4 dígitos al abrir la app. Evita que otros curiosee tus finanzas, pero no cifra los datos: por eso conviene guardar respaldos.</p>'+(S.settings.pin?'<button class="btn block" data-a="pinchange">Cambiar PIN</button><button class="btn block" data-a="pinoff">Quitar PIN</button>':'<button class="btn block" data-a="pinon">Activar PIN</button>')+'</div>';
+  h+='<h4>Datos</h4><div class="card"><p>Tus datos se guardan en este dispositivo y navegador. <b>'+lastBackupText()+'</b></p>'+
+    '<button class="btn primary" data-a="export">Guardar respaldo</button><button class="btn block" data-a="import">Restaurar respaldo</button>'+
+    (pv?'<button class="btn block" id="undo" data-a="undorestore">Deshacer última restauración o borrado ('+fdate(pv.at.slice(0,10))+')</button>':'')+
     '<button class="btn block" data-a="welcome">Ver la guía de inicio</button>'+
     '<button class="btn danger" id="wipe" data-a="wipe">Borrar todos los datos</button></div>';
   return page('Ajustes',(canSave?'':'<div class="banner">Este navegador no permite guardar datos. Lo que registres se perderá al cerrar la página; usa Exportar respaldo.</div>')+h);
@@ -1909,6 +2045,7 @@ function ensureAccess(){
   if(t.indexOf(cur)<0)S.ui.tab[S.ui.account]=t[0];
 }
 function render(){
+  if(locked){closeSheet();document.body.dataset.pal=S.ui.pal||'classic';$('#app').innerHTML=viewLock();return;}
   ensureAccess();
   document.body.dataset.acc=S.ui.account;
   document.body.dataset.pal=S.ui.pal||'classic';
@@ -1916,7 +2053,7 @@ function render(){
   if(!S.ui.welcomed)h=viewWelcome();
   else if(S.ui.view==='summary')h=viewSummary();
   else if(S.ui.view==='settings')h=viewSettings();
-  else h=header()+(canSave?'':'<div class="banner">Este navegador no permite guardar datos. Lo que registres se perderá al cerrar la página.</div>')+'<main>'+screen()+'</main>'+fab()+nav();
+  else h=header()+(canSave?'':'<div class="banner">Este navegador no permite guardar datos. Lo que registres se perderá al cerrar la página.</div>')+'<main>'+backupBanner()+screen()+'</main>'+fab()+nav();
   $('#app').innerHTML=h;
 }
 function go(view){S.ui.view=view;save();render();window.scrollTo(0,0);}
@@ -2052,6 +2189,18 @@ var A={
     commit('Categoría agregada');
   },
   export:function(){sheetExport();},
+  bksnooze:function(){S.settings.snooze=plusDays(7);commit('Te lo recordaré en una semana');},
+  pinon:function(){sheetPin('on');},pinchange:function(){sheetPin('change');},pinoff:function(){sheetPin('off');},
+  pk:function(el){pinPress(el.dataset.v);},
+  pdel:function(){pinBuf=pinBuf.slice(0,-1);render();},
+  pforgot:function(){sheetForgotPin();},
+  undorestore:function(el){
+    if(!el.dataset.armed){el.dataset.armed='1';var old=el.textContent;el.textContent='Toca otra vez para recuperar';setTimeout(function(){delete el.dataset.armed;el.textContent=old;},3500);return;}
+    var pv=readPrev();if(!pv||!pv.data)return toast('No hay copia para recuperar');
+    var n=norm(pv.data);keepPin(n);S=n;S.ui.view='settings';S.ui.welcomed=true;
+    try{localStorage.removeItem(KEY+'.prev');}catch(e){}
+    commit('Datos recuperados');
+  },
   import:function(){sheetImport();},
   seed:function(el){
     if(!S.tx.length&&!S.sales.length&&!S.products.length){seedDemo();commit('Datos de ejemplo cargados');return;}
@@ -2066,8 +2215,9 @@ var A={
       el.dataset.armed='1';var old=el.textContent;el.textContent='Toca otra vez para borrar todo';
       setTimeout(function(){delete el.dataset.armed;el.textContent=old;},3500);return;
     }
-    var keep={plan:S.plan,level:S.level};
-    S=norm(keep);S.ui.welcomed=true;S.ui.view='settings';commit('Datos borrados');
+    stashPrev();
+    var keep={plan:S.plan,level:S.level,settings:{pin:S.settings.pin,pinSalt:S.settings.pinSalt}};
+    S=norm(keep);if(!S.settings.pin){delete S.settings.pin;delete S.settings.pinSalt;}S.ui.welcomed=true;S.ui.view='settings';commit('Datos borrados');
   }
 };
 
@@ -2077,7 +2227,16 @@ document.addEventListener('click',function(e){
   var fn=A[el.dataset.a];
   if(fn)fn(el,e);
 });
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden){hiddenAt=Date.now();}
+  else if(S.settings.pin&&hiddenAt&&Date.now()-hiddenAt>60000){locked=true;pinBuf='';render();}
+});
 document.addEventListener('keydown',function(e){
+  if(locked&&!(document.querySelector('#sheet.open'))){
+    if(/^\d$/.test(e.key))pinPress(e.key);
+    else if(e.key==='Backspace'){pinBuf=pinBuf.slice(0,-1);render();}
+    return;
+  }
   if(e.key==='Escape')closeSheet();
   if((e.key==='Enter'||e.key===' ')&&e.target.getAttribute&&e.target.getAttribute('role')==='button'&&e.target.dataset.a){
     e.preventDefault();
