@@ -36,11 +36,15 @@ body[data-pal="duo"]{--pc:#0B63C8;--bc:#C72A6E;--pct:#0B63C8;--bct:#C72A6E}
 :root[data-theme="dark"] body[data-pal="pink"]{--pc:#C93573;--bc:#C93573;--pct:#FF8FBA;--bct:#FF8FBA}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) body[data-pal="duo"]{--pc:#1F73DE;--bc:#C93573;--pct:#7DB8FF;--bct:#FF8FBA}}
 :root[data-theme="dark"] body[data-pal="duo"]{--pc:#1F73DE;--bc:#C93573;--pct:#7DB8FF;--bct:#FF8FBA}
+body[data-pal="rosepastel"]{color-scheme:light;--bg:#FCEEF3;--sf:#FFFFFF;--sf2:#FFF6F9;--ink:#3B1F2B;--mut:#7A5A68;--line:#F0D3DE;--pos:#1E7F5C;--neg:#B3261E;--warn:#9A5B00;--pc:#B83A6B;--bc:#B83A6B;--pct:#B83A6B;--bct:#B83A6B;--scrim:rgba(59,31,43,.4)}
+body[data-pal="gold"]{color-scheme:dark;--bg:#0B0B0C;--sf:#151515;--sf2:#1C1B18;--ink:#F4EBD3;--mut:#A99F86;--line:#2E2A20;--pos:#5FD39A;--neg:#FF7B69;--warn:#E0A93B;--pc:#D4AF37;--bc:#D4AF37;--pct:#E6C65A;--bct:#E6C65A;--onacc:#1A1405;--scrim:rgba(0,0,0,.7)}
+body[data-pal="sage"]{color-scheme:light;--bg:#EEF2EC;--sf:#FAFCF8;--sf2:#F3F6F0;--ink:#26332B;--mut:#5F6E63;--line:#D9E1D6;--pos:#2E7D55;--neg:#B5473A;--warn:#94620F;--pc:#4F7A64;--bc:#4F7A64;--pct:#3F6853;--bct:#3F6853;--scrim:rgba(38,51,43,.4)}
+body[data-pal="calm"]{color-scheme:dark;--bg:#1B2229;--sf:#232C34;--sf2:#29343D;--ink:#DCE5EA;--mut:#8EA0AC;--line:#34424D;--pos:#6FCBA0;--neg:#F28C7C;--warn:#E3B25C;--pc:#6FB3C0;--bc:#6FB3C0;--pct:#8CC8D3;--bct:#8CC8D3;--onacc:#0B1418;--scrim:rgba(0,0,0,.55)}
 body[data-acc="personal"]{--acc:var(--pc);--accT:var(--pct)}
 body[data-acc="business"]{--acc:var(--bc);--accT:var(--bct)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 'Instrument Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased;--acc:var(--pc);--accT:var(--pct)}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 'Instrument Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased;--acc:var(--pc);--accT:var(--pct);--onacc:#fff}
 body.lock{overflow:hidden}
 [hidden]{display:none!important}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -53,7 +57,7 @@ button{cursor:pointer;border:0;background:none;padding:0;text-align:inherit}
 .top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);display:flex;align-items:center;gap:6px;margin:0 -16px;padding:12px 16px 10px}
 .seg{flex:1;display:flex;background:var(--sf);border:1px solid var(--line);border-radius:999px;padding:3px}
 .seg button{flex:1;padding:9px 6px;border-radius:999px;font-weight:600;color:var(--mut);display:flex;gap:6px;align-items:center;justify-content:center;text-align:center}
-.seg button.on{background:var(--acc);color:#fff}
+.seg button.on{background:var(--acc);color:var(--onacc)}
 .seg button.lockd{opacity:.55}
 .ib{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:var(--ink);flex:none}
 .ib:hover{background:var(--sf)}
@@ -62,7 +66,7 @@ button{cursor:pointer;border:0;background:none;padding:0;text-align:inherit}
 .card{background:var(--sf);border:1px solid var(--line);border-radius:18px;padding:16px;margin:0 0 12px}
 .card h3{margin:0 0 10px;font-size:15px;font-weight:600}
 .card p{margin:0 0 10px;color:var(--mut)}
-.hero{background:var(--acc);color:#fff;border-radius:22px;padding:20px;margin:0 0 12px}
+.hero{background:var(--acc);color:var(--onacc);border-radius:22px;padding:20px;margin:0 0 12px}
 .hero small{opacity:.82;font-size:13px}
 .big{font-size:38px;line-height:1.1;font-weight:700;letter-spacing:-.02em;margin:4px 0 14px}
 .hsplit{display:flex;gap:10px}
@@ -115,7 +119,7 @@ button.item,div.item[data-a]{cursor:pointer}
 
 /* Botones y campos */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:46px;padding:0 18px;border-radius:14px;font-weight:600;background:var(--sf2);border:1px solid var(--line);text-align:center}
-.btn.primary{background:var(--acc);color:#fff;border-color:transparent;width:100%}
+.btn.primary{background:var(--acc);color:var(--onacc);border-color:transparent;width:100%}
 .btn.danger{color:var(--neg);width:100%;margin-top:8px}
 .btn.tint{background:transparent;color:var(--accT);border-color:var(--accT)}
 .btn.sm{min-height:36px;padding:0 13px;font-size:14px;border-radius:11px}
@@ -129,7 +133,7 @@ button.item,div.item[data-a]{cursor:pointer}
 .chip{position:relative}
 .chip input{position:absolute;opacity:0;pointer-events:none}
 .chip span{display:inline-flex;align-items:center;gap:6px;padding:9px 13px;border:1px solid var(--line);border-radius:999px;background:var(--sf2);font-size:14px}
-.chip input:checked+span{background:var(--acc);color:#fff;border-color:transparent}
+.chip input:checked+span{background:var(--acc);color:var(--onacc);border-color:transparent}
 .chip input:focus-visible+span{outline:2px solid var(--accT);outline-offset:2px}
 .chip i{width:9px;height:9px;border-radius:50%;flex:none}
 .chips.two{flex-wrap:nowrap}
@@ -137,7 +141,7 @@ button.item,div.item[data-a]{cursor:pointer}
 .chips.two .chip span{width:100%;justify-content:center}
 .tabs{display:flex;gap:8px;margin:0 0 12px;overflow-x:auto}
 .chip2{padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:var(--sf);font-size:14px;white-space:nowrap;flex:none}
-.chip2.on{background:var(--acc);color:#fff;border-color:transparent}
+.chip2.on{background:var(--acc);color:var(--onacc);border-color:transparent}
 .tot{display:flex;justify-content:space-between;align-items:baseline;padding:10px 0;margin-bottom:8px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 .tot b{font-size:22px}
 .tot small{display:block;color:var(--mut);font-size:13px;text-align:right}
@@ -170,7 +174,7 @@ h4{margin:18px 0 8px;font-size:14px;color:var(--mut);font-weight:600}
 .nav button{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;font-size:11px;color:var(--mut);border-radius:12px;text-align:center}
 .nav span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nav button.on{color:var(--accT);font-weight:600}
-.fab{position:fixed;right:max(16px,calc(50% - 244px));bottom:calc(84px + env(safe-area-inset-bottom,0px));width:56px;height:56px;border-radius:18px;background:var(--acc);color:#fff;display:grid;place-items:center;box-shadow:0 6px 18px rgba(0,0,0,.25);z-index:31}
+.fab{position:fixed;right:max(16px,calc(50% - 244px));bottom:calc(84px + env(safe-area-inset-bottom,0px));width:56px;height:56px;border-radius:18px;background:var(--acc);color:var(--onacc);display:grid;place-items:center;box-shadow:0 6px 18px rgba(0,0,0,.25);z-index:31}
 
 /* Hojas inferiores */
 #sheet{position:fixed;inset:0;z-index:50;display:none}
@@ -1847,8 +1851,8 @@ function viewSettings(){
   var plans=[['both','Personal + Empresa','Acceso a las dos cuentas y a las transferencias.'],['personal','Solo Personal','Solo la cuenta personal.'],['business','Solo Empresa','Solo la cuenta de negocio.']];
   var levels=[['basic','Básico','Ingresos, egresos y balance.'],['control','Control','Categorías, gráfico de gastos y deudas.'],['planning','Planificación','Metas, presupuestos y plan mensual.']];
   var h='<h4>Plan de acceso (simulado)</h4>'+plans.map(function(p){return '<button class="opt '+(S.plan===p[0]?'on':'')+'" data-a="setplan" data-v="'+p[0]+'"><span><b>'+p[1]+'</b><small>'+p[2]+'</small></span></button>';}).join('');
-  var pals=[['classic','Clásico','Azul en Personal y verde en Empresa.','#2450D6','#0C6B58'],['blue','Azul','Todo en tonos azules.','#0B63C8','#7DB8FF'],['pink','Rosado','Todo en tonos rosados.','#C72A6E','#FF8FBA'],['duo','Azul y rosado','Azul en Personal y rosado en Empresa.','#0B63C8','#C72A6E']];
-  h+='<h4>Colores de la app</h4>'+pals.map(function(p){return '<button class="opt '+((S.ui.pal||'classic')===p[0]?'on':'')+'" data-a="setpal" data-v="'+p[0]+'"><span style="flex:1"><b>'+p[1]+'</b><small>'+p[2]+'</small></span><span style="display:flex;gap:4px"><i style="width:18px;height:18px;border-radius:50%;background:'+p[3]+'"></i><i style="width:18px;height:18px;border-radius:50%;background:'+p[4]+'"></i></span></button>';}).join('');
+  var pals=[['classic','Clásico','Azul en Personal y verde en Empresa.','#2450D6','#0C6B58'],['blue','Azul','Todo en tonos azules.','#0B63C8','#7DB8FF'],['pink','Rosado','Todo en tonos rosados.','#C72A6E','#FF8FBA'],['duo','Azul y rosado','Azul en Personal y rosado en Empresa.','#0B63C8','#C72A6E'],['rosepastel','Rosado pastel','Fondo rosa suave con letras oscuras, buen contraste.','#FCEEF3','#B83A6B'],['gold','Negro y dorado','Fondo negro con detalles dorados.','#0B0B0C','#D4AF37'],['sage','Salvia','Verdes suaves, descansa la vista.','#EEF2EC','#4F7A64'],['calm','Noche calma','Oscuro azul grisáceo, sin brillos fuertes. Ideal para concentrarte.','#1B2229','#6FB3C0']];
+  h+='<h4>Colores de la app</h4>'+pals.map(function(p){return '<button class="opt '+((S.ui.pal||'classic')===p[0]?'on':'')+'" data-a="setpal" data-v="'+p[0]+'"><span style="flex:1"><b>'+p[1]+'</b><small>'+p[2]+'</small></span><span style="display:flex;gap:4px"><i style="width:18px;height:18px;border-radius:50%;border:1px solid var(--line);background:'+p[3]+'"></i><i style="width:18px;height:18px;border-radius:50%;background:'+p[4]+'"></i></span></button>';}).join('');
   h+='<h4>Nivel de gestión personal</h4>'+levels.map(function(p){return '<button class="opt '+(S.level===p[0]?'on':'')+'" data-a="setlevel" data-v="'+p[0]+'"><span><b>'+p[1]+'</b><small>'+p[2]+'</small></span></button>';}).join('');
   if(hasP())h+='<h4>Monedas y tipo de cambio</h4><div class="card"><p>Puedes registrar ingresos, gastos, metas, presupuestos y deudas en soles, dólares o euros. Los totales en soles convierten con estos valores; son referenciales y los actualizas tú.</p><div class="row2"><label class="fld"><span>1 US$ equivale a S/</span><input id="rUSD" inputmode="decimal" value="'+S.settings.rates.USD+'"></label><label class="fld"><span>1 € equivale a S/</span><input id="rEUR" inputmode="decimal" value="'+S.settings.rates.EUR+'"></label></div><button class="btn block" data-a="saverates">Guardar tipos de cambio</button></div>';
   if(lvl()>=2){
